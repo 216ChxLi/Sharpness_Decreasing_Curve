@@ -1,0 +1,257 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Feb 22 10:16:23 2023
+
+Code NO.2
+
+@author: LIC7LR
+"""
+
+import matplotlib.pyplot as plt
+import numpy as np
+import tensorflow as tf
+import csv
+import pandas as pd
+
+
+from sklearn.feature_selection import VarianceThreshold
+from sklearn.feature_selection import SelectKBest
+from sklearn.feature_selection import mutual_info_regression
+
+from sklearn.model_selection import train_test_split
+
+from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler
+
+class DatasetConstruction:
+    
+    """The fundamental function"""
+    def get_data(self, path):
+                
+        def csv_to_data(path):
+            csv_reader = csv.reader(open(path))
+            data = [row for row in csv_reader]
+            while [] in data:
+                data.remove([])
+            return data
+        
+        def get_redundant_features(data:list, redundant_categories= ['Irms']):        
+            redundant_features = []
+            for feature in data[0]:
+                for rc in redundant_categories:    # controls which feature to remove
+                    if rc in feature:
+                        i = data[0].index(feature)
+                        redundant_features.append(i)
+            return redundant_features
+        
+        def data_features_split(data: np.ndarray):
+            data = data[1:,]        
+            data = data.astype(float)
+            features = data[0]
+            return data, features
+        
+        def show_info(data: np.ndarray, features: np.ndarray):
+            print('\n... importing {} ...'.format(path))
+            print('data samples:     '+str(data.shape[0]))
+            print('feature numbers:  '+str(features.shape[0]))
+         
+        data = csv_to_data(path)
+        redundant_features = get_redundant_features(data)
+
+        data = np.array(data)
+        data = np.delete(data, redundant_features, axis=1)
+        data, features = data_features_split(data)
+        
+        show_info(data, features)
+        return data
+    
+    """assistant functions"""
+    def merge_data(self, data_list):         
+        data = data_list[0]
+        for _ in data_list[1:]:
+            data = np.vstack((data, _))
+            
+        data = np.array(data)
+        data = data.astype(float)
+        return data
+    
+    def set_label(self, data, label_value=1):
+        n_samples = data.shape[0]
+        label = [(np.ones(n_samples, dtype=int)*label_value).T]
+        label = np.concatenate(label,axis=0)
+        return label
+    
+    def merge_label(self, label_list):
+        label = np.concatenate(label_list,axis=0)
+        return label
+        
+    def type_transform(self, data, label):
+        data = tf.cast(data, tf.float32)
+        label = label.astype(bool)
+        return data, label
+    
+    def get_data_list(self, path_list):
+        data_list = [self.get_data(path) for path in path_list]
+        return data_list
+    
+    """Design different datasets based on different requests"""
+    def construct_single(self, data, label_value):
+        label = self.set_label(data, label_value)
+        return data, label
+    
+    def construct_plural(self, data_list, label_value_list):
+        assert(len(data_list) == len(label_value_list))
+        
+        label_list = []
+        for i in range(len(data_list)):
+            label = self.set_label(data_list[i], label_value_list[i])
+            label_list.append(label)
+
+        data = self.merge_data(data_list)
+        label = self.merge_label(label_list)
+        #data, label = self.type_transform(data, label)
+        return data, label
+        
+class FeatureEngineering:
+    
+    def send_data_label(self, data, label):
+        self.data = data
+        self.label = label
+
+    """Basic data process"""        
+    
+    def standardize(self):
+        scaler = StandardScaler()
+        scaler.fit(self.data)
+        self.data = scaler.transform(self.data)
+        return self.data
+    
+    def varThresh(self, threshold=0.04): 
+        selector = VarianceThreshold(threshold)
+        self.data = selector.fit_transform(self.data)
+        return self.data
+
+    def corrThresh(self, threshold=0.1):
+        x_df = pd.DataFrame(self.data)
+        y_df = self.label
+        bestfeatures = SelectKBest(score_func = 
+                                   mutual_info_regression)
+        fit = bestfeatures.fit(x_df,y_df)
+        dfscores = pd.DataFrame(fit.scores_)
+        scores = dfscores[0].tolist()
+
+        redundant_features = []
+        for score in scores:
+            i = scores.index(score)
+            if score < threshold:   redundant_features.append(i)
+        self.data = np.delete(self.data, redundant_features, axis=1)
+        return self.data
+
+    def preprocess(self):
+        print("preprocessing data: standardrize, variance threshold check, correlation threshold check")
+        self.standardize()
+        self.varThresh()
+        self.corrThresh()
+        return self.data, self.label
+    
+    def scale_to_range01(self, data):
+        scaler = MinMaxScaler()
+        scaler.fit(data)
+        data = scaler.transform(data)
+        data = 1 / (1 + np.exp(data))
+        return data
+    
+class PrincipleComponentAnalyse:    
+    
+    def send_data_label(self, data, label):
+        self.data = data
+        self.label = label
+    
+    def get_projectionmatrix(self, data, dimension=10):
+        cov_matrix = np.cov(data.T)
+        self.eigen_val, self.eigen_vec = np.linalg.eig(cov_matrix)
+        
+        eigen_pairs = [(np.abs(self.eigen_val[i]), 
+                        self.eigen_vec[:, i]) 
+                       for i in range(len(self.eigen_val))]    
+        
+        PCA_matrix = eigen_pairs[0][1][:, np.newaxis]
+        for d in range(1,dimension):
+            PCA_matrix = np.hstack((PCA_matrix, 
+                                    eigen_pairs[d][1][:, np.newaxis])) 
+        return PCA_matrix
+    
+    def project_matrix(self, data, PCA_matrix):
+        data = data.dot(PCA_matrix)      
+        data = np.real(data)
+        return data
+    
+    def rank_features(self):
+
+        tot = sum(self.eigen_val)
+        self.eigen_val_mean = self.eigen_val/tot
+        self.var_exp = [i for i in sorted(self.eigen_val_mean, reverse=True)]
+        self.cum_var_exp = np.cumsum(self.var_exp)
+        
+        num_features = len(self.eigen_val)
+        #fig = plt.figure(figsize=(12,4)) 
+        #num_features = len(self.var_exp)-1
+        plt.bar(range(1, (num_features+1)), self.var_exp[0:num_features], alpha=0.5, align='center', label='Individual percentage ') # 柱状 Individual_explained_variance 
+        plt.step(range(1, (num_features+1)), self.cum_var_exp[0:num_features+1], where='mid', label='Cumulative percentage') # Cumulative_explained_variance
+        
+        plt.ylabel("relative percentages")
+        plt.xlabel("eigenvalues index")
+        plt.legend(loc='right')
+        plt.show()
+    
+        
+    def run(self):
+        pca_matrix = self.get_projectionmatrix(self.data, dimension=10)
+        #self.rank_features()
+        self.data = self.project_matrix(self.data, pca_matrix)
+        return self.data
+
+    def show_info(self, data, label, title = 'PCA cluster', cluster_names = [0,1], legend=True):
+        
+        for l in np.unique(label):
+            plt.scatter(data[label == l, 0],
+                        data[label == l, 1],
+                        label=cluster_names[l])    # c=c, marker=m
+        plt.title(title)
+        plt.xlabel('PC1')
+        plt.ylabel('PC2')
+        
+        #plt.xlim(-30, 30)
+        #plt.ylim(-30, 30)
+        
+        if legend:
+            #plt.legend(loc=2, bbox_to_anchor=(1.05,1.0),borderaxespad = 0.)
+            #plt.legend(loc=2, bbox_to_anchor=(0.26,0.18),borderaxespad = 0.)
+            plt.legend(loc=2)
+        plt.show()
+        
+if __name__ == '__main__':
+    
+    dc = DatasetConstruction()
+    fe = FeatureEngineering()
+    PCA = PrincipleComponentAnalyse()
+
+    ref = "Grind_20"
+    ref_path = './Dataset_training/Dataset_training_{}.csv'.format(ref)    
+    ref_data = dc.get_data(ref_path)
+    ref_label_value = 0
+    #ref_data, ref_label = dc.construct_single(ref_data, ref_label_value)
+    
+    for i in range(19,20):
+        pred = "Grind_{}".format(str(i))
+        pred_path = './Dataset_training/Dataset_training_{}.csv'.format(pred)
+    
+        pred_data = dc.get_data(pred_path)
+        pred_label_value = 1
+        data, label = dc.construct_plural([ref_data,pred_data], [ref_label_value,pred_label_value])
+        
+        fe.send_data_label(data, label)
+        data, label = fe.preprocess()
+        PCA.send_data_label(data, label)
+        data_pca = PCA.run()
+        PCA.show_info(data_pca, label, cluster_names=[ref,pred])
