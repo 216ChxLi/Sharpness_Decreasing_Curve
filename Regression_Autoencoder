@@ -1,0 +1,160 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Mar  2 13:10:38 2023
+
+Code NO.4
+
+@author: LIC7LR
+"""
+
+from Feature_Engineering import DatasetConstruction
+from Feature_Engineering import FeatureEngineering
+from Feature_Engineering import PrincipleComponentAnalyse
+
+import matplotlib.pyplot as plt
+import numpy as np
+import tensorflow as tf
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
+
+from tensorflow.keras import layers
+from tensorflow.keras.models import Model
+
+
+class Autoencoder(Model):
+  
+    def __init__(self):
+        super(Autoencoder, self).__init__()
+        self.encoder = tf.keras.Sequential([
+          layers.Dense(32, activation="relu"),
+          layers.Dense(16, activation="relu"),
+          layers.Dense(8, activation="relu")])
+    
+        self.decoder = tf.keras.Sequential([
+          layers.Dense(16, activation="relu"),
+          layers.Dense(32, activation="relu"),
+          layers.Dense(10, activation="sigmoid")])     # the final layer has same dimension as PCA data
+
+    def call(self, x):
+        encoded = self.encoder(x)
+        decoded = self.decoder(encoded)
+        return decoded
+    
+    def calculate_loss(self, original_data, method):
+        reconstruction_data = self.predict(original_data)
+        if method =='mae':
+            loss = tf.keras.losses.mae(reconstruction_data, original_data)
+        elif method == 'mse':
+            loss = tf.keras.losses.mse(reconstruction_data, original_data)
+        elif method == 'binary_crossentropy':
+            print(original_data)
+            #loss = -(original_data * np.log(reconstruction_data) + (1 - original_data) * np.log(1 - reconstruction_data))
+            loss = -(reconstruction_data * np.log(original_data) + (1 - reconstruction_data) * np.log(1 - original_data))
+        loss = np.mean(loss)
+        return loss
+    
+def show_Curve(Sharpness_Decreasing_Curve):
+    x = range(1,len(Sharpness_Decreasing_Curve)+1)
+    y = Sharpness_Decreasing_Curve
+    plt.plot(x,y,'o-',color = 'g')#o-:圆形
+    plt.xlabel("Grinding sequence")#横坐标名字
+    plt.ylabel("Sharpness")#纵坐标名字
+    plt.legend(loc = "best")#图例
+    
+    x_major_locator=plt.MultipleLocator(1)
+    ax=plt.gca()
+    ax.xaxis.set_major_locator(x_major_locator)
+    plt.xlim(1,20)
+    plt.show()
+
+if __name__ == '__main__':
+
+    dc = DatasetConstruction()
+    fe = FeatureEngineering()
+    PCA = PrincipleComponentAnalyse()
+        
+    ref_path_list = ['./Dataset_training/Dataset_training_Grind_{}.csv'.format(i) for i in [18,19,20]]
+    ref_data_list = dc.get_data_list(ref_path_list)
+    ref_label_value_list = [0]*len(ref_data_list)
+    ref_data, ref_label = dc.construct_plural(ref_data_list, ref_label_value_list)
+
+    Sharpness_Decreasing_Curve = []
+    for i in range(1,21):
+        pred = "Grind_{}".format(str(i))
+        pred_path = './Dataset_training/Dataset_training_{}.csv'.format(pred)
+        pred_data = dc.get_data(pred_path)
+        pred_label_value = 1
+        
+        data, label = dc.construct_plural([ref_data,pred_data], [0,pred_label_value])        
+        fe.send_data_label(data, label)
+        data_fe, label_fe = fe.preprocess()
+        
+        PCA.send_data_label(data_fe, label_fe)
+        data_pca = PCA.run()
+        PCA.show_info(data_pca, label, cluster_names=["reference: Grind 18 & 19 & 20",pred])
+        
+        ref_data_pca = data_pca[label==0]
+        #ref_data_pca = fe.scale_to_range01(ref_data_pca)
+        pred_data_pca = data_pca[label==1]
+        #pred_data_pca = fe.scale_to_range01(pred_data_pca)
+        ref_label = label[label==0]
+        pred_label = label[label==1]
+        
+        train_data, test_data, train_label, test_label = train_test_split(data_pca, label, test_size = 0.1, random_state=42)
+        
+        autoencoder = Autoencoder()
+        autoencoder.compile(optimizer='adam', loss='mse')
+        history = autoencoder.fit(ref_data_pca, ref_data_pca,                     
+                        epochs=80, 
+                        batch_size=512,
+                        validation_data=(test_data, test_data),
+                        shuffle=True)    
+        
+        plt.plot(history.history["loss"], label="Training Loss")
+        plt.plot(history.history["val_loss"], label="Testing Loss")
+        plt.ylabel("MSE Loss")
+        plt.xlabel("epochs")
+        plt.legend()
+        #plt.show()
+                
+        reference = autoencoder.calculate_loss(ref_data_pca, method='mse')
+        prediction = autoencoder.calculate_loss(pred_data_pca, method='mse')
+        Sharpness = prediction-reference
+        Sharpness_Decreasing_Curve.append(Sharpness)
+        
+        print("reference: ", reference)
+        print("prediction: ", prediction)
+        print('difference: {}'.format(Sharpness))
+    
+    print(Sharpness_Decreasing_Curve)
+    show_Curve(Sharpness_Decreasing_Curve)
+    
+    """
+    # No funtion part. Just for explaining the principle in Masterthesis 
+    
+    ref_data, ref_label = Dataset.construct(20)
+
+    for Grind in range(1,21):
+        pred_data, pre_label = Dataset.construct(Grind)
+        
+        ref_data, pred_data = PCA.process(ref_data, pred_data)
+        data = merge(ref_data, pred_data)
+        label = merge(ref_label, pred_label)
+        
+        train_data, train_label = ref_data, ref_label    
+        _, test_data, _, test_label = train_test_split(data, label, 
+                                                       test_size = 0.1)
+        autoencoder = AnomalyDetector()
+        autoencoder.compile(optimizer='adam', loss='mse')
+        autoencoder.fit(train_data, train_data,                     
+                        epochs=80, batch_size=512,
+                        validation_data=(test_data, test_data),
+                        shuffle=True)    
+
+    reference = autoencoder.calculate_loss(ref_data, method='mse')
+    prediction = autoencoder.calculate_loss(pred_data, method='mse')
+    Sharpness = prediction-reference
+    Sharpness_Decreasing_Curve.append(Sharpness)
+    
+    """
