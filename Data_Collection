@@ -1,0 +1,92 @@
+# -*- coding: utf-8 -*-
+
+"""
+Created on Wed Feb 22 10:16:23 2023
+
+Code NO.1
+
+This code describes how to organize data from Clip data.
+
+Each Clip data we got has 20 rows, each row is a Grind.
+This code takes one same row from all Clip data.
+For example, take all first row and genertate a Dataset_training_Grind_1.csv
+
+@author: LIC7LR
+"""
+
+
+import os
+import csv
+
+class DataCollection:
+    
+    def __init__(self, path, Dataset_name, random_file):
+        self.path = path
+        self.Dataset_name = Dataset_name
+        self.random_file = random_file
+        
+        csv_reader = csv.reader(open(random_file))
+        rows = [row for row in csv_reader]
+        self.title = rows[0]
+
+    def find_files(self):
+                
+        files_path = []
+                
+        for root, dirs, files in os.walk(path):         
+            for dir_ in dirs:
+                if dir_.endswith('V1_hop1'):
+                    file = os.path.join(root,dir_)
+                    files_path.append(file)
+
+        return files_path
+
+    def find_data(self, file_path):
+        
+        csv_reader = csv.reader(open(file_path+'/feature.csv'))
+        rows = [row for row in csv_reader]
+        data = rows[1:]
+       
+        return data
+                
+    def write(self):
+        
+        files_path = self.find_files()
+        
+        for file_path in files_path:
+            data = self.find_data(file_path)
+                    
+            print('\nwriting file'+ file_path)
+            
+            for i in range(len(data)): 
+                print('writing Clipping window'+ str(i+1))
+                                
+                with open(self.path+'/{}_Grind_{}.csv'.format(self.Dataset_name, (i+1)),'a+') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(data[i])        
+                    f.close()
+
+if __name__ == '__main__':
+    
+    """
+    path = "./Dataset_training"
+    Dataset_name = "Dataset_training"
+    # Choose a random file here to initialize the feature titles
+    random_file = './Dataset_training/0206_Dataset_/2023_02_06_02-0/2023.02.06_08.47.33_V1_hop1/feature.csv' 
+    
+    """
+    path = "./Dataset_validating"
+    Dataset_name = "Dataset_validating"
+    # Choose a random file here to initialize the feature titles
+    random_file = './Dataset_validating/0202_Dataset_/2023_02_02_15-0/2023.02.02_14.07.36_V1_hop1/feature.csv' 
+    
+    
+    dc = DataCollection(path, Dataset_name, random_file)
+    
+    for i in range(1,21):
+        with open(path+'/{}_Grind_{}.csv'.format(dc.Dataset_name, i),'w') as f:
+            writer = csv.writer(f)
+            writer.writerow(dc.title)
+            f.close()
+    
+    dc.write()
