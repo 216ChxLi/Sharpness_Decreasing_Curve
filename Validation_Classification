@@ -1,0 +1,49 @@
+"""
+Created on Mon Mar  6 15:47:37 2023
+
+Code NO.5
+
+@author: LIC7LR
+"""
+from Feature_Engineering import DatasetConstruction
+from sklearn.metrics import classification_report
+import pickle
+from sklearn.preprocessing import StandardScaler
+
+dc = DatasetConstruction()
+
+sharp_path_list = ['./Dataset_validating/Dataset_validating_Grind_{}.csv'.format(i) for i in range(1,14)]
+sharp_data_list = dc.get_data_list(sharp_path_list)
+sharp_label_value_list = [0]*len(sharp_data_list)
+sharp_data, sharp_label = dc.construct_plural(sharp_data_list, sharp_label_value_list)
+
+blunt_path_list = ['./Dataset_validating/Dataset_validating_Grind_{}.csv'.format(i) for i in range(14,21)]
+blunt_data_list = dc.get_data_list(blunt_path_list)
+blunt_label_value_list = [1]*len(blunt_data_list)
+blunt_data, blunt_label = dc.construct_plural(blunt_data_list, blunt_label_value_list)
+
+X_val = dc.merge_data([sharp_data, blunt_data])
+y_val = dc.merge_label([sharp_label, blunt_label])
+
+with open('./MachineLearning_Model/Training_data.sav', 'rb') as f:
+    X_train = pickle.load(f)
+    
+data = dc.merge_data([X_train, X_val])
+scaler = StandardScaler()
+scaler = scaler.fit(X_train)
+
+with open('./MachineLearning_Model/scaler.sav', 'rb') as f:
+    scaler = pickle.load(f)
+    X_val = scaler.transform(X_val)
+
+mode_list = ['Support_Vector_Machine.sav',
+             'Random_Forest.sav',
+             'K_Nearst_Neighbors.sav']
+for ml in mode_list:
+    mode = './MachineLearning_Model/{}'.format(ml)
+    with open(mode, 'rb') as f:
+        clf = pickle.load(f)
+    
+    pred_label = clf.predict(X_val)
+    print('***********     {}     ***********'.format(ml[:-4]))
+    print(classification_report(y_val,pred_label,target_names=['sharp wheel', 'blunt wheel']))
