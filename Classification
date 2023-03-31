@@ -1,0 +1,238 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Jan 20 10:19:49 2023
+
+Code 3
+
+@author: LIC7LR
+
+"""
+
+from Feature_Engineering import DatasetConstruction
+from Feature_Engineering import FeatureEngineering
+
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
+from sklearn.metrics import confusion_matrix
+
+from sklearn import svm
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import GridSearchCV
+
+from sklearn.ensemble import RandomForestClassifier
+
+from sklearn.neighbors import NeighborhoodComponentsAnalysis, KNeighborsClassifier
+from sklearn.pipeline import Pipeline
+
+from sklearn.gaussian_process import GaussianProcessClassifier
+from sklearn.gaussian_process.kernels import RBF
+
+import pickle
+import os
+
+def save(file_name, file):
+    folder = './MachineLearning_Model'
+    if not os.path.exists(folder):  
+        os.makedirs(folder)
+        
+    with open('{}/{}.sav'.format(folder, file_name), 'wb') as f:
+        pickle.dump(file, f)
+
+
+class MachineLearning:
+    
+    def __init__(self):
+        self.scaler = StandardScaler()
+        self.clf = RandomForestClassifier(n_estimators=30)  # just to initialize
+        self.clf_name = ''
+    
+    def train(self, X_train, y_train):
+        
+        self.scaler.fit(X_train)
+        self.X_train_std = self.scaler.transform(X_train)
+        
+        save('scaler', self.scaler)
+        
+        self.y_train = y_train
+        
+        print('\n')
+        print('........................................... training {} Model ...........................................'.format(self.clf_name))
+        
+        self.clf = self.clf.fit(self.X_train_std,self.y_train)
+    
+    def predict(self, X_test, y_test):
+        
+        X_test_std = self.scaler.transform(X_test)
+        
+        self.clf.score(X_test_std, y_test)
+        y_pred = self.clf.predict(X_test_std)
+        
+        #print('recall = (True positive) / ((True positive) + (False negative)),        召回率 = 样本中的正例有多少被预测正确')
+        #print('precision = (True positive) / ((True positive) + (False positive))，     精确率 = 预测为正的样本中有多少是真正的正样本。')
+        #print('f1-scoreF1 = 2 / （1/recall + 1/precision）                               F1指标表示召回率和精确率两个指标的调和平均数，召回率和精确率越接近,F1指标越高。\n')
+        
+        #print(classification_report(y_test,y_pred,target_names=['good condition', 'during weariness processtotally worn']))
+        print(classification_report(y_test,y_pred,target_names=['sharp wheel', 'blunt wheel']))
+        
+        #print('纵坐标表示预测的是谁，横坐标表示标准的是谁。对角线的值越大，预测能力越好。')
+        print("confusion matrix: ")
+        print(confusion_matrix(y_test,y_pred))
+        
+    def save(self):
+        
+        save(self.clf_name, self.clf)
+        
+        """
+        folder = './MachineLearning_Model'
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+
+        with open('{}/{}.sav'.format(folder, self.clf_name), 'wb') as f:
+            pickle.dump(self.clf, f)
+        """  
+        
+    def version(self):
+        print('\nestimator paramters:')
+        print(self.clf)
+        print('\n')
+
+class SupportVectorMachine(MachineLearning):
+    
+    def __init__(self):
+        super(SupportVectorMachine, self).__init__()
+        self.clf_name = 'Support_Vector_Machine' 
+        self.clf = svm.SVC(kernel='rbf',class_weight='balanced')
+        
+        """
+        Brutto Search: 
+        Search for the best parameter set to control the tradeoff.
+        'C' and 'gamma' are typically parameters for kernel function rbf
+        Since we already have enough accuracy, it is unnecessary here. The code comment down is just FYI
+
+        param_grid = {'C':[1e1,1e2,1e3, 5e3,1e4,5e4], 
+        'gamma':[0.0001,0.0008,0.0005,0.008,0.005,]}
+        self.model = GridSearchCV(svm.SVC(kernel='rbf',class_weight='balanced'),param_grid,cv=10)  
+        
+        svm.SVC(C=10.0, cache_size=200, class_weight='balanced', coef0=0.0,
+        decision_function_shape=None, degree=3, gamma=0.005, kernel='rbf',
+        max_iter=-1, probability=False, random_state=None, shrinking=True,
+        tol=0.001, verbose=False)
+  
+    def version(self):
+
+        print('\nestimator paramters:')
+        print(self.model.best_estimator_)
+        print('\n')
+    """
+class RandomForest(MachineLearning):
+    
+    def __init__(self):
+        super(RandomForest, self).__init__()
+        self.clf_name = 'Random_Forest'
+        self.clf = RandomForestClassifier(n_estimators=30) 
+        
+class KNearestNeighbors(MachineLearning):
+    
+    def __init__(self):
+        super(KNearestNeighbors, self).__init__()    
+        nca = NeighborhoodComponentsAnalysis()
+        knn = KNeighborsClassifier(n_neighbors=10)  
+        self.clf_name = 'K_Nearst_Neighbors'
+        self.clf = Pipeline([('nca', nca), ('knn', knn)])
+        
+class GaussianProcess(MachineLearning):
+    
+    def __init__(self):
+        super(GaussianProcess, self).__init__()    
+        kernel = 1.0 * RBF(1.0)
+ 
+        self.clf_name = 'Gaussian_Process'
+        #self.clf = GaussianProcessClassifier(kernel=kernel,random_state=0)
+        self.clf = GaussianProcessClassifier(kernel=kernel)
+        
+if __name__ == '__main__':
+    
+    dc = DatasetConstruction()
+    fe = FeatureEngineering()
+    
+    """
+    # No funtion part. Just for explaining the principle in Masterthesis 
+    
+    file = './Dataset_training/'
+    sharp_path = [file+'Grind_{}.csv'.format(i) for i in range(1,14)]
+    sharp_data, sharp_label = construct_dataset(sharp_path,
+                                                sharp_label_value = 0)
+    
+    blunt_path = [file+'Grind_{}.csv'.format(i) for i in range(14,21)]
+    blunt_data, blunt_label = construct_dataset(blunt_path, 
+                                                blunt_label_value = 1)
+    
+    data = merge_data([sharp_data, blunt_data])
+    label = merge_label([sharp_label, blunt_label])
+    X_train, X_test, y_train, y_test = train_test_split(data, label)
+    """
+    
+    sharp_path_list = ['./Dataset_training/Dataset_training_Grind_{}.csv'.format(i) for i in range(1,14)]
+    sharp_data_list = dc.get_data_list(sharp_path_list)
+    sharp_label_value_list = [0]*len(sharp_data_list)
+    sharp_data, sharp_label = dc.construct_plural(sharp_data_list, sharp_label_value_list)
+    
+    blunt_path_list = ['./Dataset_training/Dataset_training_Grind_{}.csv'.format(i) for i in range(14,21)]
+    blunt_data_list = dc.get_data_list(blunt_path_list)
+    blunt_label_value_list = [1]*len(blunt_data_list)
+    blunt_data, blunt_label = dc.construct_plural(blunt_data_list, blunt_label_value_list)
+    
+    data = dc.merge_data([sharp_data, blunt_data])
+    label = dc.merge_label([sharp_label, blunt_label])
+    
+    X_train, X_test, y_train, y_test = train_test_split(data, label, test_size = 0.1)
+    save('Training_data', X_train)
+    
+    svm_ = SupportVectorMachine()        
+    rf_ = RandomForest()
+    knn_ = KNearestNeighbors()
+    #gp_ = GaussianProcess()
+    
+    model_list = [svm_, rf_, knn_]
+    for model in model_list:
+        model.train(X_train, y_train)
+        model.version()
+        model.predict(X_test, y_test)
+        model.save()
+        
+    """
+    # No funtion part. Just for explaining the principle in Masterthesis 
+
+    class MachineLearning:
+        
+        def __init__(self):
+            self.scaler = StandardScaler()
+            self.clf = Classifier()
+            self.clf_name = Classifier_name
+        
+        def train(self, X_train, y_train):
+            self.scaler.fit(X_train)
+            self.X_train_std = self.scaler.transform(X_train)
+            self.y_train = y_train
+            self.clf = self.clf.fit(self.X_train_std,self.y_train)
+        
+        def predict(self, X_test, y_test):
+            X_test_std = self.scaler.transform(X_test)
+            self.clf.score(X_test_std, y_test)
+            y_pred = self.clf.predict(X_test_std)
+            print(classification_report(y_test, y_pred,
+                                        target_names=['sharp wheel', 
+                                                      'blunt wheel']))
+        def save(self):
+            folder = './MachineLearning_Model'
+            if not os.path.exists(folder):
+                os.makedirs(folder)
+            with open('{}/{}.sav'.format(folder, self.clf_name),'wb') as f:
+                pickle.dump(self.clf, f)
+                
+        def version(self):
+            print('\nestimator paramters:')
+            print(self.clf)
+            print('\n')
+
+    """
